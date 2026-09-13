@@ -146,7 +146,7 @@ let state = {
   notas: [], notaEditing: null,
   loteExpandido: new Set(),
   anoResumo: new Date().getFullYear(),
-  resumoAba: 'mensal',
+  mesResumo: new Date().getMonth() + 1,
   editing: { pedidos:null, producao:null, injecoes:null, despesas:null, precos:null }
 };
 
@@ -1225,48 +1225,106 @@ function dadosAnuais(){
   });
 }
 
-function graficoLinhas(labels, series, height){
-  height = height || 300;
-  const legendH = 34;
-  const bottomH = 30;
-  const leftPad = 16, rightPad = 16;
+function fmtCompacto(n){
+  const sinal = n < 0 ? '-' : '';
+  n = Math.abs(n);
+  if(n >= 1000) return sinal + 'R$' + (n/1000).toFixed(1).replace('.0','') + 'mil';
+  return sinal + 'R$' + Math.round(n);
+}
+
+function calcularEscalaY(maxVal){
+  if(maxVal <= 0) return {max:100, steps:[0,25,50,75,100]};
+  const magnitude = Math.pow(10, Math.floor(Math.log10(maxVal)));
+  const normalizado = maxVal / magnitude;
+  let niceMax;
+  if(normalizado <= 1) niceMax = 1;
+  else if(normalizado <= 2) niceMax = 2;
+  else if(normalizado <= 5) niceMax = 5;
+  else niceMax = 10;
+  const max = niceMax * magnitude;
+  const steps = [0, max*0.25, max*0.5, max*0.75, max];
+  return {max, steps};
+}
+
+function graficoMensalCompleto(labels, barSeries, lineSeries, mesSelecionado, height){
+  height = height || 360;
+  const legendH = 34, bottomH = 34, leftPad = 68, rightPad = 16;
   const chartH = height - legendH - bottomH;
-  const svgWidth = Math.max(labels.length * 60 + 40, 360);
-  const stepX = labels.length > 1 ? (svgWidth - leftPad - rightPad) / (labels.length - 1) : 0;
-  const maxVal = Math.max(1, ...series.flatMap(s=>s.values));
+  const groupW = 74;
+  const svgWidth = Math.max(labels.length * groupW + leftPad + rightPad, 460);
+  const plotW = svgWidth - leftPad - rightPad;
+  const stepX = plotW / labels.length;
+  const barW = (stepX - 18) / barSeries.length;
+
+  const allVals = [...barSeries.flatMap(s=>s.values), ...lineSeries.flatMap(s=>s.values)];
+  const {max: maxVal, steps} = calcularEscalaY(Math.max(1, ...allVals));
 
   let legendItems = '';
   let lx = leftPad;
-  series.forEach(s=>{
+  [...barSeries, ...lineSeries].forEach(s=>{
     legendItems += `<circle cx="${lx+5}" cy="${legendH/2}" r="5" fill="${s.color}"></circle>
       <text x="${(lx+16).toFixed(1)}" y="${(legendH/2+4).toFixed(1)}" font-size="11" fill="#f5f5f5" font-family="Montserrat, sans-serif">${s.name}</text>`;
     lx += s.name.length * 6.5 + 34;
   });
 
-  let lines = '';
-  series.forEach(s=>{
-    const points = s.values.map((v,i)=>{
-      const x = leftPad + i * stepX;
-      const y = legendH + chartH - (v / maxVal) * chartH;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
-    lines += `<polyline points="${points}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linejoin="round"></polyline>`;
-    s.values.forEach((v,i)=>{
-      const x = leftPad + i * stepX;
-      const y = legendH + chartH - (v / maxVal) * chartH;
-      lines += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="${s.color}"><title>${s.name} — ${labels[i]}: ${fmt(v)}</title></circle>`;
+  let grid = '';
+  steps.forEach(v=>{
+    const y = legendH + chartH - (v/maxVal)*chartH;
+    grid += `<line x1="${leftPad}" y1="${y.toFixed(1)}" x2="${svgWidth-rightPad}" y2="${y.toFixed(1)}" stroke="rgba(245,245,245,0.08)" stroke-width="1"></line>`;
+    grid += `<text x="${(leftPad-10).toFixed(1)}" y="${(y+4).toFixed(1)}" font-size="10" fill="#8a8a8a" text-anchor="end" font-family="'JetBrains Mono', monospace">${fmtCompacto(v)}</text>`;
+  });
+
+  let highlight = '';
+  if(mesSelecionado){
+    const hx = leftPad + (mesSelecionado-1) * stepX;
+    highlight = `<rect x="${hx.toFixed(1)}" y="${legendH.toFixed(1)}" width="${stepX.toFixed(1)}" height="${chartH.toFixed(1)}" fill="rgba(226,20,28,0.10)"></rect>`;
+  }
+
+  let cols = '';
+  let bars = '';
+  labels.forEach((label, li)=>{
+    const cx = leftPad + li*stepX;
+    cols += `<rect data-mes-col="${li+1}" x="${cx.toFixed(1)}" y="${legendH}" width="${stepX.toFixed(1)}" height="${chartH.toFixed(1)}" fill="transparent" style="cursor:pointer;"></rect>`;
+    barSeries.forEach((s, si)=>{
+      const val = s.values[li] || 0;
+      const h = (val/maxVal)*chartH;
+      const x = cx + 9 + si*barW;
+      const y = legendH + chartH - h;
+      bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW-3).toFixed(1)}" height="${h.toFixed(1)}" fill="${s.color}" rx="2" style="pointer-events:none;"><title>${s.name} — ${label}: ${fmt(val)}</title></rect>`;
     });
   });
 
-  const labelsSvg = labels.map((l,i)=>{
-    const x = leftPad + i * stepX;
-    return `<text x="${x.toFixed(1)}" y="${height-8}" font-size="11" fill="#8a8a8a" text-anchor="middle" font-family="Montserrat, sans-serif">${l}</text>`;
+  let lines = '';
+  lineSeries.forEach(s=>{
+    const pts = s.values.map((v,i)=>{
+      const x = leftPad + i*stepX + stepX/2;
+      const y = legendH + chartH - (v/maxVal)*chartH;
+      return {x, y, v};
+    });
+    const attr = pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    lines += `<polyline points="${attr}" fill="none" stroke="${s.color}" stroke-width="2.5" style="pointer-events:none;"></polyline>`;
+    pts.forEach(p=>{
+      lines += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${s.color}" style="pointer-events:none;"><title>${s.name}: ${fmt(p.v)}</title></circle>`;
+      lines += `<text x="${p.x.toFixed(1)}" y="${(p.y-8).toFixed(1)}" font-size="9" fill="${s.color}" text-anchor="middle" font-family="'JetBrains Mono', monospace" style="pointer-events:none;">${fmtCompacto(p.v)}</text>`;
+    });
+  });
+
+  const xLabels = labels.map((l,i)=>{
+    const x = leftPad + i*stepX + stepX/2;
+    const sel = mesSelecionado && (i === mesSelecionado-1);
+    return `<text x="${x.toFixed(1)}" y="${height-10}" font-size="11" fill="${sel?'#e2141c':'#8a8a8a'}" font-weight="${sel?'700':'400'}" text-anchor="middle" font-family="Montserrat, sans-serif" style="pointer-events:none;">${l}</text>`;
   }).join('');
 
+  const axisLines = `<line x1="${leftPad}" y1="${legendH}" x2="${leftPad}" y2="${legendH+chartH}" stroke="rgba(245,245,245,0.25)"></line>
+    <line x1="${leftPad}" y1="${legendH+chartH}" x2="${svgWidth-rightPad}" y2="${legendH+chartH}" stroke="rgba(245,245,245,0.25)"></line>`;
+
   return `<div style="overflow-x:auto;">
-    <svg viewBox="0 0 ${svgWidth} ${height}" style="width:100%;min-width:${svgWidth}px;height:${height}px;display:block;">${legendItems}${lines}${labelsSvg}</svg>
+    <svg id="grafico-mensal-svg" viewBox="0 0 ${svgWidth} ${height}" style="width:100%;min-width:${svgWidth}px;height:${height}px;display:block;">
+      ${highlight}${grid}${axisLines}${bars}${lines}${xLabels}${legendItems}${cols}
+    </svg>
   </div>`;
 }
+
 
 function graficoBarras(labels, series, height){
   height = height || 260;
@@ -1298,86 +1356,85 @@ function graficoBarras(labels, series, height){
 function renderResumo(app){
   const anos = anosDisponiveis();
   const ano = state.anoResumo;
-  const aba = state.resumoAba;
+  const mes = state.mesResumo;
+  const mensal = dadosMensais(ano);
 
-  const abaChips = ['mensal','anual'].map(a=>
-    `<div class="chip ${aba===a?'active':''}" data-resumo-aba="${a}">${a==='mensal'?'Mensal':'Anual'}</div>`
+  const barSeries = [
+    {name:'Recebido', color:'#3ecf6e', values: mensal.recebido},
+    {name:'Saídas de caixa', color:'#ff5c5c', values: mensal.saidas},
+  ];
+  const saldoMensal = mensal.recebido.map((v,i)=> v + mensal.injecao[i] - mensal.saidas[i]);
+  const lineSeries = [
+    {name:'Saldo do mês', color:'#f5f5f5', values: saldoMensal},
+  ];
+
+  const idx = mes - 1;
+  const faturadoSel = mensal.faturado[idx];
+  const recebidoSel = mensal.recebido[idx];
+  const saidasSel = mensal.saidas[idx];
+  const injecaoSel = mensal.injecao[idx];
+  const saldoSel = saldoMensal[idx];
+  const pendenteSel = faturadoSel - recebidoSel;
+
+  const acumuladoAteMes = saldoMensal.slice(0, mes).reduce((a,b)=>a+b, 0);
+
+  const botoesAno = anos.map(a=>
+    `<button class="btn ${a===ano?'btn-primary':'btn-ghost-cancel'}" data-ano-btn="${a}" style="padding:6px 14px;font-size:0.8rem;">${a}</button>`
   ).join('');
 
-  let corpo = '';
-
-  if(aba === 'mensal'){
-    const mensal = dadosMensais(ano);
-    const totalFaturadoAno = mensal.faturado.reduce((a,b)=>a+b,0);
-    const totalRecebidoAno = mensal.recebido.reduce((a,b)=>a+b,0);
-    const totalSaidasAno = mensal.saidas.reduce((a,b)=>a+b,0);
-    const totalInjecaoAno = mensal.injecao.reduce((a,b)=>a+b,0);
-    const seriesMensal = [
-      {name:'Faturado', color:'#e2141c', values: mensal.faturado},
-      {name:'Recebido', color:'#3ecf6e', values: mensal.recebido},
-      {name:'Saídas de caixa', color:'#ff5c5c', values: mensal.saidas},
-      {name:'Injeção de caixa', color:'#f5f5f5', values: mensal.injecao},
-    ];
-    corpo = `
-      <div class="panel">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;flex-wrap:wrap;gap:10px;">
-          <h3 style="margin:0;">Resumo mensal — ${ano}</h3>
-          <div class="field" style="margin:0;max-width:140px;">
-            <select id="ano-select">${anos.map(a=>`<option value="${a}" ${a===ano?'selected':''}>${a}</option>`).join('')}</select>
-          </div>
-        </div>
-        ${graficoLinhas(MESES_ABREV, seriesMensal)}
-      </div>
-      <div class="cards">
-        <div class="card accent"><div class="label">Faturado (${ano})</div><div class="val">${fmt(totalFaturadoAno)}</div></div>
-        <div class="card ok"><div class="label">Recebido (${ano})</div><div class="val">${fmt(totalRecebidoAno)}</div></div>
-        <div class="card"><div class="label">Saídas de caixa (${ano})</div><div class="val" style="color:#ff5c5c;">${fmt(totalSaidasAno)}</div></div>
-        <div class="card"><div class="label">Injeção de caixa (${ano})</div><div class="val">${fmt(totalInjecaoAno)}</div></div>
-      </div>
-    `;
-  } else {
-    const anual = dadosAnuais();
-    const seriesAnual = [
-      {name:'Faturado', color:'#e2141c', values: anual.map(a=>a.faturado)},
-      {name:'Recebido', color:'#3ecf6e', values: anual.map(a=>a.recebido)},
-      {name:'Saídas de caixa', color:'#ff5c5c', values: anual.map(a=>a.saidas)},
-      {name:'Injeção de caixa', color:'#f5f5f5', values: anual.map(a=>a.injecao)},
-    ];
-    const tabelaAnual = anual.map(a => `
-      <tr>
-        <td>${a.ano}</td>
-        <td class="num" style="color:var(--red);">${fmt(a.faturado)}</td>
-        <td class="num" style="color:var(--ok);">${fmt(a.recebido)}</td>
-        <td class="num" style="color:#ff5c5c;">${fmt(a.saidas)}</td>
-        <td class="num">${fmt(a.injecao)}</td>
-      </tr>`).join('');
-    corpo = `
-      <div class="panel">
-        <h3>Resumo anual</h3>
-        ${graficoLinhas(anual.map(a=>String(a.ano)), seriesAnual)}
-      </div>
-      <div class="table-wrap">
-        <table><thead><tr>
-          <th>Ano</th><th>Faturado</th><th>Recebido</th><th>Saídas de caixa</th><th>Injeção de caixa</th>
-        </tr></thead><tbody>${tabelaAnual}</tbody></table>
-      </div>
-    `;
-  }
+  const botoesMes = MESES_ABREV.map((m,i)=>
+    `<button class="btn ${mes===i+1?'btn-primary':'btn-ghost-cancel'}" data-mes-btn="${i+1}" style="padding:6px 12px;font-size:0.78rem;">${m}</button>`
+  ).join('');
 
   app.innerHTML = `
-    <div class="chips">${abaChips}</div>
-    ${corpo}
+    <div class="panel">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">${botoesAno}</div>
+      <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap;">${botoesMes}</div>
+
+      <div class="cards">
+        <div class="card"><div class="label">Saldo acumulado (até ${MESES_ABREV[idx]})</div><div class="val" style="${acumuladoAteMes<0?'color:#ff5c5c;':''}">${fmt(acumuladoAteMes)}</div></div>
+        <div class="card accent"><div class="label">Faturado — ${MESES_ABREV[idx]}/${ano}</div><div class="val">${fmt(faturadoSel)}</div></div>
+        <div class="card ok"><div class="label">Recebido — ${MESES_ABREV[idx]}/${ano}</div><div class="val">${fmt(recebidoSel)}</div></div>
+        <div class="card"><div class="label">Saídas — ${MESES_ABREV[idx]}/${ano}</div><div class="val" style="color:#ff5c5c;">${fmt(saidasSel)}</div></div>
+        <div class="card"><div class="label">Injeção — ${MESES_ABREV[idx]}/${ano}</div><div class="val">${fmt(injecaoSel)}</div></div>
+        <div class="card ${saldoSel>=0?'ok':''}"><div class="label">Saldo do mês</div><div class="val" style="${saldoSel<0?'color:#ff5c5c;':''}">${fmt(saldoSel)}</div></div>
+      </div>
+      <div class="hint" style="margin-bottom:16px;">A receber neste mês (faturado ainda não pago): ${fmt(pendenteSel)}</div>
+
+      <h3 style="margin-bottom:14px;">Faturamento x despesas por mês — ${ano}</h3>
+      ${graficoMensalCompleto(MESES_ABREV, barSeries, lineSeries, mes)}
+    </div>
+
+    <div class="panel section-gap">
+      <h3>Comparativo anual</h3>
+      ${(() => {
+        const anual = dadosAnuais();
+        const barSeriesAno = [
+          {name:'Recebido', color:'#3ecf6e', values: anual.map(a=>a.recebido)},
+          {name:'Saídas de caixa', color:'#ff5c5c', values: anual.map(a=>a.saidas)},
+        ];
+        const lineSeriesAno = [
+          {name:'Faturado', color:'#e2141c', values: anual.map(a=>a.faturado)},
+        ];
+        return graficoMensalCompleto(anual.map(a=>String(a.ano)), barSeriesAno, lineSeriesAno, null);
+      })()}
+    </div>
   `;
 
-  document.querySelectorAll('[data-resumo-aba]').forEach(el=>{
-    el.addEventListener('click', ()=>{ state.resumoAba = el.dataset.resumoAba; render(); });
+  document.querySelectorAll('[data-ano-btn]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.anoResumo = Number(el.dataset.anoBtn); render(); });
   });
-  const anoSelect = document.getElementById('ano-select');
-  if(anoSelect) anoSelect.addEventListener('change', e=>{
-    state.anoResumo = Number(e.target.value);
-    render();
+  document.querySelectorAll('[data-mes-btn]').forEach(el=>{
+    el.addEventListener('click', ()=>{ state.mesResumo = Number(el.dataset.mesBtn); render(); });
   });
+  const svg = document.getElementById('grafico-mensal-svg');
+  if(svg){
+    svg.querySelectorAll('[data-mes-col]').forEach(el=>{
+      el.addEventListener('click', ()=>{ state.mesResumo = Number(el.dataset.mesCol); render(); });
+    });
+  }
 }
+
 function renderPrecos(app){
   const premFields = [
     ['tarifa', 'Tarifa de energia (R$/kWh)', ''],
