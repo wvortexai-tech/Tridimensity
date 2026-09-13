@@ -690,6 +690,11 @@ function renderPedidos(app){
   const faturado = filtered.reduce((s,p)=>s+p.valor,0);
   const recebido = filtered.filter(p=>p.pago).reduce((s,p)=>s+p.valor,0);
 
+  const contagemLotes = {};
+  filtered.forEach(p=>{ if(p.lote) contagemLotes[p.lote] = (contagemLotes[p.lote]||0)+1; });
+  const contagemPedidos = filtered.filter(p=> !p.lote || contagemLotes[p.lote] <= 1).length
+    + Object.values(contagemLotes).filter(c=>c>1).length;
+
   let chips = ['Todos', ...CATEGORIAS].map(c=>
     `<div class="chip ${state.filtro===c?'active':''}" data-cat="${c}">${c} (${c==='Todos'?state.pedidos.length:state.pedidos.filter(p=>p.categoria===c).length})</div>`
   ).join('');
@@ -811,7 +816,7 @@ function renderPedidos(app){
   let rows = rowsArr.join('');
   app.innerHTML = `
     <div class="cards">
-      <div class="card"><div class="label">Pedidos</div><div class="val">${filtered.length}</div></div>
+      <div class="card"><div class="label">Pedidos</div><div class="val">${contagemPedidos}</div></div>
       <div class="card accent"><div class="label">Faturado</div><div class="val">${fmt(faturado)}</div></div>
       <div class="card ok"><div class="label">Recebido</div><div class="val">${fmt(recebido)}</div></div>
       <div class="card"><div class="label">A receber</div><div class="val">${fmt(faturado-recebido)}</div></div>
