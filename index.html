@@ -159,10 +159,13 @@
   }
   #format-toolbar .separador{width:1px;height:20px;background:rgba(245,245,245,0.15);margin:0 4px;}
 
-  .video-wrap{position:relative;width:100%;max-width:800px;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:var(--surface-2);}
-  .video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
-  .video-placeholder{display:flex;align-items:center;justify-content:center;border:1.5px dashed rgba(245,245,245,0.2);}
+  .video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;}
+  .video-item{position:relative;aspect-ratio:9/16;border-radius:14px;overflow:hidden;background:var(--surface-2);}
+  .video-item iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+  .video-placeholder{display:flex;align-items:center;justify-content:center;height:100%;border:1.5px dashed rgba(245,245,245,0.2);}
   .video-placeholder span{color:var(--muted);font-size:0.85rem;text-align:center;padding:0 20px;}
+  .video-add{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;}
+  .video-add input{flex:1;min-width:220px;background:var(--surface-2);border:1px solid rgba(245,245,245,0.14);border-radius:8px;padding:9px 12px;color:var(--white);font-family:var(--font);font-size:0.85rem;}
 </style>
 </head>
 <body>
@@ -568,14 +571,27 @@ function renderBlockContent(b, idx){
     </div>`;
   }
   if(b.tipo === 'video'){
-    const videoId = extrairIdYoutube(b.urlYoutube);
-    const player = videoId
-      ? `<div class="video-wrap"><iframe src="https://www.youtube-nocookie.com/embed/${videoId}" title="${b.titulo}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
-      : `<div class="video-wrap video-placeholder"><span>Cole o link do vídeo (não listado) do YouTube abaixo</span></div>`;
+    const videos = b.videos || [];
+    const itens = videos.map((url, vi)=>{
+      const vid = extrairIdYoutube(url);
+      const conteudo = vid
+        ? `<iframe src="https://www.youtube-nocookie.com/embed/${vid}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
+        : `<div class="video-placeholder"><span>Link inválido</span></div>`;
+      return `<div class="video-item">
+        <button class="item-remove" style="display:${state.editando?'block':'none'};" data-removevideo="${idx}.${vi}">×</button>
+        ${conteudo}
+      </div>`;
+    }).join('');
+    const addForm = state.editando ? `
+      <div class="video-add">
+        <input type="text" id="novo-video-${idx}" placeholder="Cole o link do Short do YouTube (não listado)">
+        <button class="btn btn-primary btn-sm" data-addvideo="${idx}">+ adicionar</button>
+      </div>` : '';
     return `<div class="wrap">
       <h2 class="bloco-title" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h2>
-      ${player}
-      ${state.editando ? `<div class="field" style="max-width:520px;margin-top:14px;"><label>Link do YouTube (não listado)</label><div contenteditable="true" data-path="${idx}.urlYoutube" style="background:var(--surface-2);border:1px solid rgba(245,245,245,0.14);border-radius:8px;padding:9px 12px;font-size:0.85rem;">${b.urlYoutube||''}</div></div>` : ''}
+      <div class="video-grid">${itens}</div>
+      ${videos.length===0 && !state.editando ? '<p class="bloco-body">Em breve.</p>' : ''}
+      ${addForm}
     </div>`;
   }
   return '';
@@ -648,6 +664,26 @@ function wireBlockEvents(){
     btn.addEventListener('click', ()=>{
       const [idx, fi] = btn.dataset.removefoto.split('.');
       state.blocos[idx].fotos.splice(Number(fi), 1);
+      salvarBlocos(); renderBlocos();
+    });
+  });
+
+  // galeria de vídeos: adicionar/remover
+  cont.querySelectorAll('[data-addvideo]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = btn.dataset.addvideo;
+      const input = document.getElementById('novo-video-' + idx);
+      const url = input.value.trim();
+      if(!url) return;
+      if(!state.blocos[idx].videos) state.blocos[idx].videos = [];
+      state.blocos[idx].videos.push(url);
+      salvarBlocos(); renderBlocos();
+    });
+  });
+  cont.querySelectorAll('[data-removevideo]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const [idx, vi] = btn.dataset.removevideo.split('.');
+      state.blocos[idx].videos.splice(Number(vi), 1);
       salvarBlocos(); renderBlocos();
     });
   });
@@ -775,7 +811,7 @@ const TIPOS_DISPONIVEIS = [
   {tipo:'servicos', label:'Grid de serviços/cards'},
   {tipo:'estatisticas', label:'Números do sistema (ao vivo)'},
   {tipo:'passos', label:'Passo a passo'},
-  {tipo:'video', label:'Vídeo do YouTube'},
+  {tipo:'video', label:'Vídeos do YouTube (Shorts, vários)'},
   {tipo:'contato', label:'Contato'},
 ];
 
@@ -805,7 +841,7 @@ function novoBlocoPadrao(tipo){
   if(tipo==='servicos') return {...base, titulo:'Nossos serviços', itens:[{imagem:null,titulo:'Novo serviço',corpo:'Descreva aqui.'}]};
   if(tipo==='estatisticas') return {...base, label3:'MESES NO MERCADO', footer:'Isso é só o começo.'};
   if(tipo==='passos') return {...base, eyebrow:'COMO FUNCIONA', itens:[{texto:'Primeiro passo'}]};
-  if(tipo==='video') return {...base, titulo:'Veja como funciona', urlYoutube:''};
+  if(tipo==='video') return {...base, titulo:'Vídeos', videos:[]};
   if(tipo==='contato') return {...base, titulo:'Fale com a gente', whats:'📱 WhatsApp: [seu número]', insta:'📷 Instagram: @tridimensity'};
   return base;
 }
