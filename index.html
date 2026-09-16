@@ -158,6 +158,11 @@
     width:30px;height:30px;border:none;border-radius:8px;background:none;cursor:pointer;padding:0;
   }
   #format-toolbar .separador{width:1px;height:20px;background:rgba(245,245,245,0.15);margin:0 4px;}
+
+  .video-wrap{position:relative;width:100%;max-width:800px;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:var(--surface-2);}
+  .video-wrap iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+  .video-placeholder{display:flex;align-items:center;justify-content:center;border:1.5px dashed rgba(245,245,245,0.2);}
+  .video-placeholder span{color:var(--muted);font-size:0.85rem;text-align:center;padding:0 20px;}
 </style>
 </head>
 <body>
@@ -269,6 +274,13 @@ async function salvarLogo(dataUrl){
 }
 
 function comprimirImagem(file, maxW, callback){
+  // GIF: mantém como está (sem passar por canvas) pra preservar a animação
+  if(file.type === 'image/gif'){
+    const reader = new FileReader();
+    reader.onload = e => callback(e.target.result);
+    reader.readAsDataURL(file);
+    return;
+  }
   const reader = new FileReader();
   reader.onload = e => {
     const img = new Image();
@@ -555,6 +567,17 @@ function renderBlockContent(b, idx){
       <div class="linha" contenteditable="${ed}" data-path="${idx}.insta">${b.insta}</div>
     </div>`;
   }
+  if(b.tipo === 'video'){
+    const videoId = extrairIdYoutube(b.urlYoutube);
+    const player = videoId
+      ? `<div class="video-wrap"><iframe src="https://www.youtube-nocookie.com/embed/${videoId}" title="${b.titulo}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`
+      : `<div class="video-wrap video-placeholder"><span>Cole o link do vídeo (não listado) do YouTube abaixo</span></div>`;
+    return `<div class="wrap">
+      <h2 class="bloco-title" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h2>
+      ${player}
+      ${state.editando ? `<div class="field" style="max-width:520px;margin-top:14px;"><label>Link do YouTube (não listado)</label><div contenteditable="true" data-path="${idx}.urlYoutube" style="background:var(--surface-2);border:1px solid rgba(245,245,245,0.14);border-radius:8px;padding:9px 12px;font-size:0.85rem;">${b.urlYoutube||''}</div></div>` : ''}
+    </div>`;
+  }
   return '';
 }
 
@@ -752,8 +775,26 @@ const TIPOS_DISPONIVEIS = [
   {tipo:'servicos', label:'Grid de serviços/cards'},
   {tipo:'estatisticas', label:'Números do sistema (ao vivo)'},
   {tipo:'passos', label:'Passo a passo'},
+  {tipo:'video', label:'Vídeo do YouTube'},
   {tipo:'contato', label:'Contato'},
 ];
+
+function extrairIdYoutube(texto){
+  if(!texto) return null;
+  texto = texto.trim();
+  const padroes = [
+    /(?:youtube\.com\/watch\?v=)([\w-]{11})/,
+    /(?:youtu\.be\/)([\w-]{11})/,
+    /(?:youtube\.com\/embed\/)([\w-]{11})/,
+    /(?:youtube\.com\/shorts\/)([\w-]{11})/,
+  ];
+  for(const p of padroes){
+    const m = texto.match(p);
+    if(m) return m[1];
+  }
+  if(/^[\w-]{11}$/.test(texto)) return texto;
+  return null;
+}
 
 function novoBlocoPadrao(tipo){
   const base = {id: uid(), tipo, bg:{tipo:'nenhum'}};
@@ -764,6 +805,7 @@ function novoBlocoPadrao(tipo){
   if(tipo==='servicos') return {...base, titulo:'Nossos serviços', itens:[{imagem:null,titulo:'Novo serviço',corpo:'Descreva aqui.'}]};
   if(tipo==='estatisticas') return {...base, label3:'MESES NO MERCADO', footer:'Isso é só o começo.'};
   if(tipo==='passos') return {...base, eyebrow:'COMO FUNCIONA', itens:[{texto:'Primeiro passo'}]};
+  if(tipo==='video') return {...base, titulo:'Veja como funciona', urlYoutube:''};
   if(tipo==='contato') return {...base, titulo:'Fale com a gente', whats:'📱 WhatsApp: [seu número]', insta:'📷 Instagram: @tridimensity'};
   return base;
 }
