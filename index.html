@@ -15,7 +15,7 @@
     --font:'Montserrat',sans-serif; --maxw:1240px;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
-  html{scroll-behavior:smooth;}
+  html{scroll-behavior:smooth;scroll-padding-top:70px;}
   body{background:var(--bg);color:var(--white);font-family:var(--font);}
   a{color:inherit;text-decoration:none;}
   img{max-width:100%;display:block;}
@@ -30,6 +30,10 @@
   .brand img{height:28px;width:auto;}
   .brand span{font-weight:800;font-size:0.95rem;letter-spacing:0.02em;}
   .trocar-logo-btn{font-size:0.65rem;color:var(--muted);background:none;border:1px solid rgba(245,245,245,0.2);border-radius:100px;padding:3px 8px;cursor:pointer;margin-left:6px;}
+  .nav-links{display:flex;gap:26px;align-items:center;}
+  .nav-links a{font-size:0.85rem;color:var(--muted);font-weight:500;text-decoration:none;}
+  .nav-links a:hover{color:var(--white);}
+  @media(max-width:700px){.nav-links .nav-anchor{display:none;}}
   .owner-link{font-size:0.72rem;color:var(--muted);cursor:pointer;background:none;border:none;font-family:var(--font);}
   .owner-link:hover{color:var(--white);}
   .edit-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
@@ -42,7 +46,7 @@
   main{padding-top:62px;}
   .wrap{max-width:var(--maxw);margin:0 auto;padding:0 5%;}
 
-  .bloco{position:relative;padding:70px 0;}
+  .bloco{position:relative;padding:44px 0;}
   body.editando .bloco{outline:1px dashed transparent;transition:outline 0.15s;}
   body.editando .bloco:hover{outline-color:rgba(226,20,28,0.35);}
   .bloco.drag-over{outline:2px dashed var(--red) !important;}
@@ -66,7 +70,7 @@
   h2.bloco-title{font-size:clamp(1.5rem,3.2vw,2.2rem);font-weight:800;line-height:1.2;margin-bottom:16px;max-width:680px;}
   p.bloco-body{color:var(--muted);font-size:1rem;line-height:1.7;max-width:600px;}
 
-  .hero-wrap{min-height:70vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+  .hero-wrap{padding:20px 0 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
   .hero-wrap img{height:74px;margin-bottom:22px;}
 
   .servicos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;}
@@ -147,8 +151,11 @@
     <button class="trocar-logo-btn" id="trocar-logo-btn" style="display:none;">trocar logo</button>
     <input type="file" accept="image/*" id="logo-input">
   </div>
-  <div class="edit-bar" id="header-right">
-    <button class="owner-link" id="abrir-login">Área do proprietário</button>
+  <div class="nav-links" id="header-right">
+    <a href="#sobre" class="nav-anchor">Sobre Nós</a>
+    <a href="#servicos" class="nav-anchor">Serviços</a>
+    <a href="#galeria" class="nav-anchor">Galeria</a>
+    <a href="#contato" class="nav-anchor">Contato</a>
   </div>
 </header>
 
@@ -400,10 +407,18 @@ function renderBlockContent(b, idx){
   return '';
 }
 
+function anchorId(b, idx, jaUsados){
+  const mapa = {'texto':'sobre','servicos':'servicos','galeria':'galeria','contato':'contato'};
+  const ancora = mapa[b.tipo];
+  if(ancora && !jaUsados.has(ancora)){ jaUsados.add(ancora); return ` id="${ancora}"`; }
+  return '';
+}
+
 function renderBlocos(){
   const cont = document.getElementById('blocos-container');
+  const jaUsados = new Set();
   cont.innerHTML = state.blocos.map((b, idx)=> `
-    <div class="bloco" data-blockidx="${idx}" style="${bgStyle(b.bg)}">
+    <div class="bloco" data-blockidx="${idx}"${anchorId(b, idx, jaUsados)} style="${bgStyle(b.bg)}">
       ${state.editando ? toolbarHtml(idx) : ''}
       ${renderBlockContent(b, idx)}
     </div>
@@ -642,7 +657,6 @@ function abrirLogin(){
   });
 }
 
-document.getElementById('abrir-login').addEventListener('click', abrirLogin);
 document.getElementById('abrir-login-footer').addEventListener('click', abrirLogin);
 
 async function iniciar(){
