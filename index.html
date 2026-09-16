@@ -335,10 +335,25 @@ function renderBlockContent(b, idx){
   if(b.tipo === 'servicos'){
     const cards = b.itens.map((item, ii)=>{
       const imgStyle = item.imagem ? `background-image:url(${item.imagem});` : '';
+      const formato = item.formato || '16/10';
+      const opcoesFormato = [
+        ['16/10','Paisagem'], ['1/1','Quadrado'], ['3/4','Retrato'], ['4/3','Padrão']
+      ];
+      const selectFormato = state.editando ? `
+        <select class="formato-select" data-formatoitem="${idx}.itens.${ii}.formato" style="position:absolute;top:8px;left:8px;z-index:5;font-size:0.68rem;background:rgba(10,10,10,0.75);color:var(--white);border:1px solid rgba(245,245,245,0.25);border-radius:6px;padding:3px 6px;">
+          ${opcoesFormato.map(([v,l])=>`<option value="${v}" ${formato===v?'selected':''}>${l}</option>`).join('')}
+        </select>` : '';
+      const moveButtons = state.editando ? `
+        <div style="position:absolute;bottom:8px;left:8px;z-index:5;display:flex;gap:4px;">
+          <button class="btn btn-ghost btn-sm" data-moveitem="${idx}.itens.${ii}.-1" ${ii===0?'disabled':''} title="Mover pra esquerda">‹</button>
+          <button class="btn btn-ghost btn-sm" data-moveitem="${idx}.itens.${ii}.1" ${ii===b.itens.length-1?'disabled':''} title="Mover pra direita">›</button>
+        </div>` : '';
       return `<div class="servico-card">
         <button class="item-remove" data-removeitem="${idx}.itens.${ii}">×</button>
-        <div class="img-slot ${item.imagem?'has-img':''}" style="${imgStyle}" data-imgblock="${idx}.itens.${ii}.imagem">
+        <div class="img-slot ${item.imagem?'has-img':''}" style="${imgStyle}aspect-ratio:${formato.replace('/', '/')};" data-imgblock="${idx}.itens.${ii}.imagem">
+          ${selectFormato}
           <div class="placeholder-txt">Clique pra adicionar foto</div>
+          ${moveButtons}
           <input type="file" accept="image/*" data-imgblockinput="${idx}.itens.${ii}.imagem">
         </div>
         <div class="servico-card-body">
@@ -493,6 +508,27 @@ function wireBlockEvents(){
       const parts = btn.dataset.removeitem.split('.'); // idx.itens.ii
       const idx = parts[0], ii = Number(parts[2]);
       state.blocos[idx].itens.splice(ii, 1);
+      salvarBlocos(); renderBlocos();
+    });
+  });
+
+  // formato da foto do produto
+  cont.querySelectorAll('[data-formatoitem]').forEach(sel=>{
+    sel.addEventListener('change', ()=>{
+      setPath(state.blocos, sel.dataset.formatoitem, sel.value);
+      salvarBlocos(); renderBlocos();
+    });
+  });
+
+  // reordenar produtos dentro do card de serviços
+  cont.querySelectorAll('[data-moveitem]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const parts = btn.dataset.moveitem.split('.'); // idx.itens.ii.delta
+      const idx = parts[0], ii = Number(parts[2]), delta = Number(parts[3]);
+      const itens = state.blocos[idx].itens;
+      const novoIndex = ii + delta;
+      if(novoIndex < 0 || novoIndex >= itens.length) return;
+      [itens[ii], itens[novoIndex]] = [itens[novoIndex], itens[ii]];
       salvarBlocos(); renderBlocos();
     });
   });
