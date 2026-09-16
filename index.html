@@ -140,6 +140,24 @@
   .tipo-opcao:hover{border-color:var(--red);}
 
   input[type="file"]{display:none;}
+
+  #format-toolbar{
+    display:none;position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:70;
+    background:var(--surface);border:1px solid rgba(245,245,245,0.15);border-radius:100px;
+    padding:6px 10px;gap:4px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+  body.editando #format-toolbar{display:flex;}
+  #format-toolbar button{
+    background:transparent;border:none;color:var(--white);width:32px;height:32px;border-radius:8px;
+    cursor:pointer;font-family:var(--font);font-size:0.9rem;
+  }
+  #format-toolbar button:hover{background:var(--surface-2);}
+  #format-toolbar button.negrito{font-weight:800;}
+  #format-toolbar button.italico{font-style:italic;}
+  #format-toolbar input[type="color"]{
+    width:30px;height:30px;border:none;border-radius:8px;background:none;cursor:pointer;padding:0;
+  }
+  #format-toolbar .separador{width:1px;height:20px;background:rgba(245,245,245,0.15);margin:0 4px;}
 </style>
 </head>
 <body>
@@ -171,6 +189,16 @@
   <br>
   <button class="owner-link" id="abrir-login-footer">Área do proprietário</button>
 </footer>
+
+<div id="format-toolbar">
+  <button class="negrito" id="fmt-negrito" title="Negrito">B</button>
+  <button class="italico" id="fmt-italico" title="Itálico">I</button>
+  <div class="separador"></div>
+  <button id="fmt-menos" title="Diminuir texto">A-</button>
+  <button id="fmt-mais" title="Aumentar texto">A+</button>
+  <div class="separador"></div>
+  <input type="color" id="fmt-cor" title="Cor do texto" value="#f5f5f5">
+</div>
 
 <script>
 const SUPABASE_URL = "https://exbtigaltyubozebetfs.supabase.co";
@@ -276,6 +304,107 @@ async function carregarEstatisticas(){
 
 let ESTATS = {pedidos:'—', clientes:'—', meses:'—'};
 
+function imgSlotInner(src, ajuste){
+  if(!src) return '';
+  const a = ajuste || {x:0, y:0, zoom:1};
+  return `<img src="${src}" draggable="false" style="width:100%;height:100%;object-fit:cover;transform:translate(${a.x}px,${a.y}px) scale(${a.zoom});transform-origin:center;pointer-events:none;">`;
+}
+
+function abrirAjusteFoto(imgPath, ajustePath){
+  const src = getPath(state.blocos, imgPath);
+  const atual = getPath(state.blocos, ajustePath) || {x:0, y:0, zoom:1};
+  let ajuste = {...atual};
+  let arrastando = false;
+  let inicio = {x:0, y:0};
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card" style="max-width:420px;">
+      <h3>Ajustar foto</h3>
+      <p>Arraste a foto pra posicionar. Use o controle abaixo pra dar zoom.</p>
+      <div id="ajuste-preview" style="position:relative;width:100%;aspect-ratio:4/3;border-radius:12px;overflow:hidden;background:var(--surface-2);cursor:grab;margin-bottom:16px;">
+        <img id="ajuste-img" src="${src}" draggable="false" style="width:100%;height:100%;object-fit:cover;transform:translate(${ajuste.x}px,${ajuste.y}px) scale(${ajuste.zoom});transform-origin:center;user-select:none;">
+      </div>
+      <div class="field">
+        <label>Zoom</label>
+        <input type="range" id="ajuste-zoom" min="1" max="3" step="0.05" value="${ajuste.zoom}" style="width:100%;">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button class="btn btn-primary" id="ajuste-salvar" style="flex:1;">Salvar</button>
+        <button class="btn btn-ghost" id="ajuste-resetar">Centralizar</button>
+      </div>
+      <button class="modal-close" id="ajuste-cancelar">Cancelar</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const preview = overlay.querySelector('#ajuste-preview');
+  const img = overlay.querySelector('#ajuste-img');
+  const zoomInput = overlay.querySelector('#ajuste-zoom');
+
+  function aplicar(){
+    img.style.transform = `translate(${ajuste.x}px,${ajuste.y}px) scale(${ajuste.zoom})`;
+  }
+
+  function posClient(e){
+    if(e.touches && e.touches[0]) return {x: e.touches[0].clientX, y: e.touches[0].clientY};
+    return {x: e.clientX, y: e.clientY};
+  }
+
+  function iniciarArrasto(e){
+    arrastando = true;
+    const p = posClient(e);
+    inicio = {x: p.x - ajuste.x, y: p.y - ajuste.y};
+    preview.style.cursor = 'grabbing';
+  }
+  function moverArrasto(e){
+    if(!arrastando) return;
+    e.preventDefault();
+    const p = posClient(e);
+    ajuste.x = p.x - inicio.x;
+    ajuste.y = p.y - inicio.y;
+    aplicar();
+  }
+  function pararArrasto(){
+    arrastando = false;
+    preview.style.cursor = 'grab';
+  }
+
+  preview.addEventListener('mousedown', iniciarArrasto);
+  window.addEventListener('mousemove', moverArrasto);
+  window.addEventListener('mouseup', pararArrasto);
+  preview.addEventListener('touchstart', iniciarArrasto, {passive:true});
+  window.addEventListener('touchmove', moverArrasto, {passive:false});
+  window.addEventListener('touchend', pararArrasto);
+
+  zoomInput.addEventListener('input', ()=>{
+    ajuste.zoom = parseFloat(zoomInput.value);
+    aplicar();
+  });
+
+  function limpar(){
+    window.removeEventListener('mousemove', moverArrasto);
+    window.removeEventListener('mouseup', pararArrasto);
+    window.removeEventListener('touchmove', moverArrasto);
+    window.removeEventListener('touchend', pararArrasto);
+    overlay.remove();
+  }
+
+  overlay.querySelector('#ajuste-resetar').addEventListener('click', ()=>{
+    ajuste = {x:0, y:0, zoom:1};
+    zoomInput.value = 1;
+    aplicar();
+  });
+  overlay.querySelector('#ajuste-cancelar').addEventListener('click', limpar);
+  overlay.querySelector('#ajuste-salvar').addEventListener('click', ()=>{
+    setPath(state.blocos, ajustePath, ajuste);
+    salvarBlocos();
+    limpar();
+    renderBlocos();
+  });
+}
+
 function bgStyle(bg){
   if(!bg || bg.tipo==='nenhum') return '';
   if(bg.tipo==='cor') return `background:${bg.cor};`;
@@ -318,12 +447,16 @@ function renderBlockContent(b, idx){
     </div>`;
   }
   if(b.tipo === 'imagem-texto'){
-    const imgStyle = b.imagem ? `background-image:url(${b.imagem});` : '';
+    const ajustarBtn = (b.imagem && state.editando) ? `<button class="btn btn-ghost btn-sm ajustar-btn" data-ajustarimg="${idx}.imagem|${idx}.imagemAjuste">Ajustar foto</button>` : '';
     return `<div class="wrap">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:36px;align-items:center;">
-        <div class="img-slot ${b.imagem?'has-img':''}" style="${imgStyle}aspect-ratio:4/3;" data-imgblock="${idx}.imagem">
-          <div class="placeholder-txt">Clique pra adicionar foto</div>
-          <input type="file" accept="image/*" data-imgblockinput="${idx}.imagem">
+        <div>
+          <div class="img-slot ${b.imagem?'has-img':''}" style="aspect-ratio:4/3;" data-imgblock="${idx}.imagem">
+            ${imgSlotInner(b.imagem, b.imagemAjuste)}
+            <div class="placeholder-txt">Clique pra adicionar foto</div>
+            <input type="file" accept="image/*" data-imgblockinput="${idx}.imagem">
+          </div>
+          ${ajustarBtn ? `<div style="margin-top:8px;">${ajustarBtn}</div>` : ''}
         </div>
         <div>
           <h2 class="bloco-title" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h2>
@@ -349,13 +482,16 @@ function renderBlockContent(b, idx){
             <button class="btn btn-ghost btn-sm" data-moveitem="${idx}.itens.${ii}.1" ${ii===b.itens.length-1?'disabled':''} title="Mover pra direita">›</button>
           </div>
         </div>` : '';
+      const ajustarBtn = (item.imagem && state.editando) ? `<div style="padding:6px 6px 0;"><button class="btn btn-ghost btn-sm ajustar-btn" style="width:100%;" data-ajustarimg="${idx}.itens.${ii}.imagem|${idx}.itens.${ii}.imagemAjuste">Ajustar foto</button></div>` : '';
       return `<div class="servico-card">
         <button class="item-remove" data-removeitem="${idx}.itens.${ii}">×</button>
         ${toolbarProduto}
-        <div class="img-slot ${item.imagem?'has-img':''}" style="${imgStyle}aspect-ratio:${formato.replace('/', '/')};" data-imgblock="${idx}.itens.${ii}.imagem">
+        <div class="img-slot ${item.imagem?'has-img':''}" style="aspect-ratio:${formato};" data-imgblock="${idx}.itens.${ii}.imagem">
+          ${imgSlotInner(item.imagem, item.imagemAjuste)}
           <div class="placeholder-txt">Clique pra adicionar foto</div>
           <input type="file" accept="image/*" data-imgblockinput="${idx}.itens.${ii}.imagem">
         </div>
+        ${ajustarBtn}
         <div class="servico-card-body">
           <h3 contenteditable="${ed}" data-path="${idx}.itens.${ii}.titulo">${item.titulo}</h3>
           <p contenteditable="${ed}" data-path="${idx}.itens.${ii}.corpo">${item.corpo}</p>
@@ -517,6 +653,14 @@ function wireBlockEvents(){
     sel.addEventListener('change', ()=>{
       setPath(state.blocos, sel.dataset.formatoitem, sel.value);
       salvarBlocos(); renderBlocos();
+    });
+  });
+
+  // ajustar posição/zoom da foto
+  cont.querySelectorAll('[data-ajustarimg]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const [imgPath, ajustePath] = btn.dataset.ajustarimg.split('|');
+      abrirAjusteFoto(imgPath, ajustePath);
     });
   });
 
@@ -694,6 +838,74 @@ function abrirLogin(){
 }
 
 document.getElementById('abrir-login-footer').addEventListener('click', abrirLogin);
+
+// ---------- BARRA DE FORMATAÇÃO ----------
+let ultimaSelecao = null;
+
+document.addEventListener('selectionchange', ()=>{
+  const sel = window.getSelection();
+  if(!sel.rangeCount || sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const el = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  if(el && el.closest('[contenteditable="true"]')){
+    ultimaSelecao = range.cloneRange();
+  }
+});
+
+function restaurarSelecao(){
+  if(!ultimaSelecao) return null;
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(ultimaSelecao);
+  return ultimaSelecao;
+}
+
+function envolverSelecaoComEstilo(estilos){
+  const range = restaurarSelecao();
+  if(!range || range.collapsed) return;
+  const span = document.createElement('span');
+  Object.assign(span.style, estilos);
+  const conteudo = range.extractContents();
+  span.appendChild(conteudo);
+  range.insertNode(span);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  const novoRange = document.createRange();
+  novoRange.selectNodeContents(span);
+  sel.addRange(novoRange);
+  ultimaSelecao = novoRange.cloneRange();
+  dispararSalvarTextoAtivo();
+}
+
+function dispararSalvarTextoAtivo(){
+  const el = document.activeElement;
+  if(el && el.hasAttribute && el.hasAttribute('data-path')){
+    setPath(state.blocos, el.dataset.path, el.innerHTML);
+    salvarBlocos();
+  } else if(ultimaSelecao){
+    const container = ultimaSelecao.commonAncestorContainer;
+    const editavel = (container.nodeType === 1 ? container : container.parentElement)?.closest('[data-path]');
+    if(editavel){ setPath(state.blocos, editavel.dataset.path, editavel.innerHTML); salvarBlocos(); }
+  }
+}
+
+document.getElementById('fmt-negrito').addEventListener('mousedown', e=>{ e.preventDefault(); restaurarSelecao(); document.execCommand('bold'); dispararSalvarTextoAtivo(); });
+document.getElementById('fmt-italico').addEventListener('mousedown', e=>{ e.preventDefault(); restaurarSelecao(); document.execCommand('italic'); dispararSalvarTextoAtivo(); });
+document.getElementById('fmt-mais').addEventListener('mousedown', e=>{ e.preventDefault(); aumentarFonte(2); });
+document.getElementById('fmt-menos').addEventListener('mousedown', e=>{ e.preventDefault(); aumentarFonte(-2); });
+document.getElementById('fmt-cor').addEventListener('input', e=>{
+  envolverSelecaoComEstilo({color: e.target.value});
+});
+
+function aumentarFonte(delta){
+  const range = restaurarSelecao();
+  if(!range || range.collapsed) return;
+  const container = range.commonAncestorContainer;
+  const elRef = container.nodeType === 1 ? container : container.parentElement;
+  const tamanhoAtual = parseFloat(window.getComputedStyle(elRef).fontSize) || 16;
+  const novoTamanho = Math.max(10, tamanhoAtual + delta);
+  envolverSelecaoComEstilo({fontSize: novoTamanho + 'px'});
+}
 
 async function iniciar(){
   await carregarPagina();
