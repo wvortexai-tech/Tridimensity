@@ -44,6 +44,19 @@
   .btn-sm{padding:5px 10px;font-size:0.7rem;border-radius:6px;}
   .icon-btn{display:inline-flex;align-items:center;justify-content:center;padding:6px;}
 
+  .area-livre{position:relative;width:100%;border:1.5px dashed rgba(245,245,245,0.15);border-radius:12px;overflow:hidden;}
+  .caixa-livre{position:absolute;transform-origin:top;padding:6px;}
+  body.editando .caixa-livre{outline:1px dashed transparent;}
+  body.editando .caixa-livre:hover{outline-color:rgba(226,20,28,0.4);}
+  .caixa-livre-ferramentas{
+    display:flex;gap:4px;align-items:center;justify-content:center;margin-bottom:4px;
+    background:var(--surface-2);border-radius:8px;padding:3px 5px;width:fit-content;margin-left:auto;margin-right:auto;
+  }
+  .caixa-livre-ferramentas span, .caixa-livre-ferramentas button{
+    background:transparent;border:none;color:var(--white);cursor:pointer;font-size:0.75rem;width:20px;height:20px;
+  }
+  .drag-handle-vertical{cursor:ns-resize;}
+
   main{padding-top:62px;}
   .wrap{max-width:var(--maxw);margin:0 auto;padding:0 5%;}
 
@@ -144,21 +157,27 @@
 
   #format-toolbar{
     display:none;position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:70;
-    background:var(--surface);border:1px solid rgba(245,245,245,0.15);border-radius:100px;
+    background:var(--surface);border:1px solid rgba(245,245,245,0.15);border-radius:14px;
     padding:6px 10px;gap:4px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,0.4);
+    flex-wrap:wrap;max-width:94vw;justify-content:center;
   }
   body.editando #format-toolbar{display:flex;}
   #format-toolbar button{
     background:transparent;border:none;color:var(--white);width:32px;height:32px;border-radius:8px;
-    cursor:pointer;font-family:var(--font);font-size:0.9rem;
+    cursor:pointer;font-family:var(--font);font-size:0.85rem;flex-shrink:0;
   }
   #format-toolbar button:hover{background:var(--surface-2);}
   #format-toolbar button.negrito{font-weight:800;}
   #format-toolbar button.italico{font-style:italic;}
   #format-toolbar input[type="color"]{
-    width:30px;height:30px;border:none;border-radius:8px;background:none;cursor:pointer;padding:0;
+    width:30px;height:30px;border:none;border-radius:8px;background:none;cursor:pointer;padding:0;flex-shrink:0;
   }
-  #format-toolbar .separador{width:1px;height:20px;background:rgba(245,245,245,0.15);margin:0 4px;}
+  #format-toolbar select, #format-toolbar input[type="number"]{
+    background:var(--surface-2);border:1px solid rgba(245,245,245,0.15);border-radius:8px;color:var(--white);
+    font-family:var(--font);font-size:0.78rem;height:32px;padding:0 6px;flex-shrink:0;
+  }
+  #format-toolbar select{max-width:130px;}
+  #format-toolbar .separador{width:1px;height:20px;background:rgba(245,245,245,0.15);margin:0 4px;flex-shrink:0;}
 
   .video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;}
   .video-item{position:relative;aspect-ratio:9/16;border-radius:14px;overflow:hidden;background:var(--surface-2);}
@@ -201,13 +220,29 @@
 </footer>
 
 <div id="format-toolbar">
+  <select id="fmt-fonte" title="Fonte">
+    <option value="Montserrat, sans-serif">Montserrat</option>
+    <option value="Arial, sans-serif">Arial</option>
+    <option value="Georgia, serif">Georgia</option>
+    <option value="'Times New Roman', serif">Times New Roman</option>
+    <option value="'Courier New', monospace">Courier New</option>
+    <option value="Verdana, sans-serif">Verdana</option>
+  </select>
+  <input type="number" id="fmt-tamanho" title="Tamanho da fonte (px)" value="16" min="8" max="120" style="width:48px;">
+  <div class="separador"></div>
   <button class="negrito" id="fmt-negrito" title="Negrito">B</button>
   <button class="italico" id="fmt-italico" title="Itálico">I</button>
-  <div class="separador"></div>
-  <button id="fmt-menos" title="Diminuir texto">A-</button>
-  <button id="fmt-mais" title="Aumentar texto">A+</button>
+  <button id="fmt-sublinhado" title="Sublinhado" style="text-decoration:underline;">U</button>
   <div class="separador"></div>
   <input type="color" id="fmt-cor" title="Cor do texto" value="#f5f5f5">
+  <div class="separador"></div>
+  <button id="fmt-align-esq" title="Alinhar à esquerda">⯇▤</button>
+  <button id="fmt-align-centro" title="Centralizar">▤</button>
+  <button id="fmt-align-dir" title="Alinhar à direita">▤⯈</button>
+  <button id="fmt-align-just" title="Justificar">▥</button>
+  <div class="separador"></div>
+  <button id="fmt-espacamento-menos" title="Diminuir espaçamento entre linhas">↕-</button>
+  <button id="fmt-espacamento-mais" title="Aumentar espaçamento entre linhas">↕+</button>
 </div>
 
 <script>
@@ -472,6 +507,14 @@ function abrirAjusteFoto(imgPath, ajustePath){
   });
 }
 
+function estiloCss(estilo){
+  if(!estilo) return '';
+  return Object.entries(estilo).map(([k,v])=>{
+    const kebab = k.replace(/[A-Z]/g, m => '-'+m.toLowerCase());
+    return `${kebab}:${v}`;
+  }).join(';');
+}
+
 function bgStyle(bg){
   if(!bg || bg.tipo==='nenhum') return '';
   if(bg.tipo==='cor') return `background:${bg.cor};`;
@@ -510,21 +553,21 @@ function renderBlockContent(b, idx){
     return `<div class="hero-wrap">
       ${controleTamanho}
       <img class="logo-img" src="${resolverImagem(state.logo) || LOGO_PADRAO}" alt="Tridimensity" style="height:${tamanhoLogo}px;margin-bottom:22px;">
-      <h1 class="hero-title" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h1>
-      <div class="hero-sub" contenteditable="${ed}" data-path="${idx}.subtitulo">${b.subtitulo}</div>
+      <h1 class="hero-title" contenteditable="${ed}" data-path="${idx}.titulo" style="${estiloCss(b.tituloEstilo)}">${b.titulo}</h1>
+      <div class="hero-sub" contenteditable="${ed}" data-path="${idx}.subtitulo" style="${estiloCss(b.subtituloEstilo)}">${b.subtitulo}</div>
     </div>`;
   }
   if(b.tipo === 'texto'){
     return `<div class="wrap">
-      <div class="eyebrow" contenteditable="${ed}" data-path="${idx}.eyebrow">${b.eyebrow}</div>
-      <h2 class="bloco-title" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h2>
-      <p class="bloco-body" contenteditable="${ed}" data-path="${idx}.corpo">${b.corpo}</p>
+      <div class="eyebrow" contenteditable="${ed}" data-path="${idx}.eyebrow" style="${estiloCss(b.eyebrowEstilo)}">${b.eyebrow}</div>
+      <h2 class="bloco-title" contenteditable="${ed}" data-path="${idx}.titulo" style="${estiloCss(b.tituloEstilo)}">${b.titulo}</h2>
+      <p class="bloco-body" contenteditable="${ed}" data-path="${idx}.corpo" style="${estiloCss(b.corpoEstilo)}">${b.corpo}</p>
     </div>`;
   }
   if(b.tipo === 'texto-centro'){
     return `<div class="wrap" style="text-align:center;">
-      <h2 class="bloco-title" style="margin:0 auto 16px;" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h2>
-      <p class="bloco-body" style="margin:0 auto;" contenteditable="${ed}" data-path="${idx}.corpo">${b.corpo}</p>
+      <h2 class="bloco-title" style="margin:0 auto 16px;${estiloCss(b.tituloEstilo)}" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h2>
+      <p class="bloco-body" style="margin:0 auto;${estiloCss(b.corpoEstilo)}" contenteditable="${ed}" data-path="${idx}.corpo">${b.corpo}</p>
     </div>`;
   }
   if(b.tipo === 'imagem-texto'){
@@ -631,9 +674,41 @@ function renderBlockContent(b, idx){
   if(b.tipo === 'contato'){
     return `<div class="wrap contato-wrap">
       <img class="logo-img" src="${resolverImagem(state.logo) || LOGO_PADRAO}" alt="Tridimensity">
-      <h2 class="bloco-title" style="margin:0 auto 6px;" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h2>
-      <div class="linha" contenteditable="${ed}" data-path="${idx}.whats">${b.whats}</div>
-      <div class="linha" contenteditable="${ed}" data-path="${idx}.insta">${b.insta}</div>
+      <h2 class="bloco-title" style="margin:0 auto 6px;${estiloCss(b.tituloEstilo)}" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h2>
+      <div class="linha" contenteditable="${ed}" data-path="${idx}.whats" style="${estiloCss(b.whatsEstilo)}">${b.whats}</div>
+      <div class="linha" contenteditable="${ed}" data-path="${idx}.insta" style="${estiloCss(b.instaEstilo)}">${b.insta}</div>
+    </div>`;
+  }
+  if(b.tipo === 'texto-livre'){
+    const altura = b.altura || 300;
+    const caixas = (b.caixas || []).map((caixa, ci)=>{
+      let posH = '';
+      if(caixa.align === 'esquerda') posH = 'left:3%;';
+      else if(caixa.align === 'direita') posH = 'right:3%;';
+      else posH = 'left:50%;transform:translateX(-50%);';
+      const ferramentasCaixa = state.editando ? `
+        <div class="caixa-livre-ferramentas">
+          <span class="drag-handle-vertical" data-dragcaixa="${idx}.${ci}" title="Arrastar (posição vertical)">⠿</span>
+          <button data-aligncaixa="${idx}.${ci}.esquerda" title="Alinhar à esquerda">⯇</button>
+          <button data-aligncaixa="${idx}.${ci}.centro" title="Centralizar">•</button>
+          <button data-aligncaixa="${idx}.${ci}.direita" title="Alinhar à direita">⯈</button>
+          <button data-delcaixa="${idx}.${ci}" title="Excluir caixa" style="color:#ff5c5c;">×</button>
+        </div>` : '';
+      return `<div class="caixa-livre" data-caixaidx="${idx}.${ci}" style="top:${caixa.top}%;${posH}width:${caixa.largura}%;">
+        ${ferramentasCaixa}
+        <div contenteditable="${ed}" data-path="${idx}.caixas.${ci}.texto" style="font-size:${caixa.fontSize||18}px;color:${caixa.cor||'#f5f5f5'};text-align:${caixa.align==='esquerda'?'left':caixa.align==='direita'?'right':'center'};">${caixa.texto}</div>
+      </div>`;
+    }).join('');
+    const controleAltura = state.editando ? `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span style="font-size:0.7rem;color:var(--muted);">Altura da área</span>
+        <input type="range" min="150" max="700" value="${altura}" data-alturacaixa="${idx}" style="width:140px;">
+        <span style="font-size:0.7rem;color:var(--muted);">${altura}px</span>
+        <button class="btn btn-ghost btn-sm" data-addcaixa="${idx}">+ nova caixa de texto</button>
+      </div>` : '';
+    return `<div class="wrap">
+      ${controleAltura}
+      <div class="area-livre" data-arealivre="${idx}" style="height:${altura}px;">${caixas}</div>
     </div>`;
   }
   if(b.tipo === 'video'){
@@ -820,6 +895,67 @@ function wireBlockEvents(){
     });
   });
 
+  // caixa de texto livre: adicionar, excluir, alinhar, arrastar
+  cont.querySelectorAll('[data-addcaixa]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const idx = btn.dataset.addcaixa;
+      if(!state.blocos[idx].caixas) state.blocos[idx].caixas = [];
+      state.blocos[idx].caixas.push({id: uid(), texto:'Novo texto', top:50, align:'centro', largura:60, fontSize:18, cor:'#f5f5f5'});
+      salvarBlocos(); renderBlocos();
+    });
+  });
+  cont.querySelectorAll('[data-delcaixa]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const [idx, ci] = btn.dataset.delcaixa.split('.');
+      state.blocos[idx].caixas.splice(Number(ci), 1);
+      salvarBlocos(); renderBlocos();
+    });
+  });
+  cont.querySelectorAll('[data-aligncaixa]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const [idx, ci, alinh] = btn.dataset.aligncaixa.split('.');
+      state.blocos[idx].caixas[Number(ci)].align = alinh;
+      salvarBlocos(); renderBlocos();
+    });
+  });
+  cont.querySelectorAll('[data-alturacaixa]').forEach(inp=>{
+    inp.addEventListener('input', ()=>{
+      const idx = inp.dataset.alturacaixa;
+      state.blocos[idx].altura = Number(inp.value);
+      const area = cont.querySelector(`[data-arealivre="${idx}"]`);
+      if(area) area.style.height = inp.value + 'px';
+      const label = inp.nextElementSibling;
+      if(label) label.textContent = inp.value + 'px';
+    });
+    inp.addEventListener('change', ()=> salvarBlocos());
+  });
+  cont.querySelectorAll('[data-dragcaixa]').forEach(handle=>{
+    handle.addEventListener('mousedown', e=>{
+      e.preventDefault();
+      const [idx, ci] = handle.dataset.dragcaixa.split('.');
+      const area = handle.closest('.area-livre');
+      const caixaEl = handle.closest('.caixa-livre');
+      function mover(ev){
+        const rect = area.getBoundingClientRect();
+        let topPct = ((ev.clientY - rect.top) / rect.height) * 100;
+        topPct = Math.max(0, Math.min(96, topPct));
+        caixaEl.style.top = topPct + '%';
+        caixaEl.dataset.novoTop = topPct;
+      }
+      function soltar(){
+        window.removeEventListener('mousemove', mover);
+        window.removeEventListener('mouseup', soltar);
+        const novoTop = caixaEl.dataset.novoTop;
+        if(novoTop !== undefined){
+          state.blocos[idx].caixas[Number(ci)].top = parseFloat(novoTop);
+          salvarBlocos();
+        }
+      }
+      window.addEventListener('mousemove', mover);
+      window.addEventListener('mouseup', soltar);
+    });
+  });
+
   if(!state.editando) return;
 
   // toolbar: cor de fundo
@@ -904,6 +1040,7 @@ const TIPOS_DISPONIVEIS = [
   {tipo:'estatisticas', label:'Números do sistema (ao vivo)'},
   {tipo:'passos', label:'Passo a passo'},
   {tipo:'video', label:'Vídeos do YouTube (Shorts, vários)'},
+  {tipo:'texto-livre', label:'Caixa de texto (arrastar/alinhar)'},
   {tipo:'contato', label:'Contato'},
 ];
 
@@ -934,6 +1071,7 @@ function novoBlocoPadrao(tipo){
   if(tipo==='estatisticas') return {...base, label3:'MESES NO MERCADO', footer:'Isso é só o começo.'};
   if(tipo==='passos') return {...base, eyebrow:'COMO FUNCIONA', itens:[{texto:'Primeiro passo'}]};
   if(tipo==='video') return {...base, titulo:'Vídeos', videos:[]};
+  if(tipo==='texto-livre') return {...base, altura:300, caixas:[{id:uid(), texto:'Novo texto', top:50, align:'centro', largura:60, fontSize:18, cor:'#f5f5f5'}]};
   if(tipo==='contato') return {...base, titulo:'Fale com a gente', whats:'📱 WhatsApp: [seu número]', insta:'📷 Instagram: @tridimensity'};
   return base;
 }
@@ -1068,10 +1206,59 @@ function dispararSalvarTextoAtivo(){
 
 document.getElementById('fmt-negrito').addEventListener('mousedown', e=>{ e.preventDefault(); restaurarSelecao(); document.execCommand('bold'); dispararSalvarTextoAtivo(); });
 document.getElementById('fmt-italico').addEventListener('mousedown', e=>{ e.preventDefault(); restaurarSelecao(); document.execCommand('italic'); dispararSalvarTextoAtivo(); });
+document.getElementById('fmt-sublinhado').addEventListener('mousedown', e=>{ e.preventDefault(); restaurarSelecao(); document.execCommand('underline'); dispararSalvarTextoAtivo(); });
 document.getElementById('fmt-mais').addEventListener('mousedown', e=>{ e.preventDefault(); aumentarFonte(2); });
 document.getElementById('fmt-menos').addEventListener('mousedown', e=>{ e.preventDefault(); aumentarFonte(-2); });
 document.getElementById('fmt-cor').addEventListener('input', e=>{
   envolverSelecaoComEstilo({color: e.target.value});
+});
+document.getElementById('fmt-fonte').addEventListener('change', e=>{
+  envolverSelecaoComEstilo({fontFamily: e.target.value});
+});
+document.getElementById('fmt-tamanho').addEventListener('change', e=>{
+  const px = parseInt(e.target.value) || 16;
+  envolverSelecaoComEstilo({fontSize: px + 'px'});
+});
+
+// Alinhamento e espaçamento entre linhas atuam no PARÁGRAFO inteiro (elemento editável ativo), não numa palavra
+function elementoEditavelAtivo(){
+  let el = document.activeElement;
+  if(el && el.hasAttribute && el.hasAttribute('data-path')) return el;
+  if(ultimaSelecao){
+    const container = ultimaSelecao.commonAncestorContainer;
+    const base = container.nodeType === 1 ? container : container.parentElement;
+    return base ? base.closest('[data-path]') : null;
+  }
+  return null;
+}
+function aplicarNoParagrafo(estilos){
+  const el = elementoEditavelAtivo();
+  if(!el) return;
+  Object.assign(el.style, estilos);
+  setPath(state.blocos, el.dataset.path, el.innerHTML);
+  // guarda também o estilo do próprio parágrafo (não só o conteúdo interno)
+  const estiloPath = el.dataset.path + 'Estilo';
+  const atual = getPath(state.blocos, estiloPath) || {};
+  setPath(state.blocos, estiloPath, {...atual, ...estilos});
+  salvarBlocos();
+}
+document.getElementById('fmt-align-esq').addEventListener('mousedown', e=>{ e.preventDefault(); aplicarNoParagrafo({textAlign:'left'}); });
+document.getElementById('fmt-align-centro').addEventListener('mousedown', e=>{ e.preventDefault(); aplicarNoParagrafo({textAlign:'center'}); });
+document.getElementById('fmt-align-dir').addEventListener('mousedown', e=>{ e.preventDefault(); aplicarNoParagrafo({textAlign:'right'}); });
+document.getElementById('fmt-align-just').addEventListener('mousedown', e=>{ e.preventDefault(); aplicarNoParagrafo({textAlign:'justify'}); });
+document.getElementById('fmt-espacamento-mais').addEventListener('mousedown', e=>{
+  e.preventDefault();
+  const el = elementoEditavelAtivo();
+  if(!el) return;
+  const atual = parseFloat(window.getComputedStyle(el).lineHeight) || 22;
+  aplicarNoParagrafo({lineHeight: (atual + 4) + 'px'});
+});
+document.getElementById('fmt-espacamento-menos').addEventListener('mousedown', e=>{
+  e.preventDefault();
+  const el = elementoEditavelAtivo();
+  if(!el) return;
+  const atual = parseFloat(window.getComputedStyle(el).lineHeight) || 22;
+  aplicarNoParagrafo({lineHeight: Math.max(14, atual - 4) + 'px'});
 });
 
 function aumentarFonte(delta){
