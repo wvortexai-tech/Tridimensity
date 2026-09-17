@@ -1208,8 +1208,6 @@ function dispararSalvarTextoAtivo(){
 document.getElementById('fmt-negrito').addEventListener('mousedown', e=>{ e.preventDefault(); restaurarSelecao(); document.execCommand('bold'); dispararSalvarTextoAtivo(); });
 document.getElementById('fmt-italico').addEventListener('mousedown', e=>{ e.preventDefault(); restaurarSelecao(); document.execCommand('italic'); dispararSalvarTextoAtivo(); });
 document.getElementById('fmt-sublinhado').addEventListener('mousedown', e=>{ e.preventDefault(); restaurarSelecao(); document.execCommand('underline'); dispararSalvarTextoAtivo(); });
-document.getElementById('fmt-mais').addEventListener('mousedown', e=>{ e.preventDefault(); aumentarFonte(2); });
-document.getElementById('fmt-menos').addEventListener('mousedown', e=>{ e.preventDefault(); aumentarFonte(-2); });
 document.getElementById('fmt-cor').addEventListener('input', e=>{
   envolverSelecaoComEstilo({color: e.target.value});
 });
