@@ -42,6 +42,7 @@
   .btn-primary{background:var(--red);color:var(--white);}
   .btn-ghost{background:transparent;border:1px solid rgba(245,245,245,0.25);color:var(--white);}
   .btn-sm{padding:5px 10px;font-size:0.7rem;border-radius:6px;}
+  .icon-btn{display:inline-flex;align-items:center;justify-content:center;padding:6px;}
 
   main{padding-top:62px;}
   .wrap{max-width:var(--maxw);margin:0 auto;padding:0 5%;}
@@ -186,7 +187,8 @@
 </header>
 
 <main>
-  <div class="add-block-row" id="add-block-top">
+  <div class="add-block-row" id="add-block-top" style="gap:8px;">
+    <button class="btn btn-ghost btn-sm icon-btn" id="add-texto-topo" title="Adicionar caixa de texto no topo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h16M4 12h11M4 18h16"/></svg></button>
     <button class="btn btn-ghost btn-sm" data-add-topo="1">+ Adicionar bloco no topo</button>
   </div>
   <div id="blocos-container"></div>
@@ -474,6 +476,8 @@ function bgStyle(bg){
   return '';
 }
 
+const ICONE_TEXTO = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h16M4 12h11M4 18h16"/></svg>`;
+
 function toolbarHtml(idx){
   return `<div class="bloco-toolbar">
     <span class="drag-handle" draggable="true" data-drag="${idx}" title="Arrastar pra reordenar">⠿</span>
@@ -481,6 +485,7 @@ function toolbarHtml(idx){
     <button class="btn btn-ghost btn-sm" data-bgimg="${idx}">Fundo: foto</button>
     <button class="btn btn-ghost btn-sm" data-bgreset="${idx}">Sem fundo</button>
     <input type="file" accept="image/*" data-bgimginput="${idx}">
+    <button class="btn btn-ghost btn-sm icon-btn" data-addtexto="${idx}" title="Adicionar caixa de texto abaixo">${ICONE_TEXTO}</button>
     <button class="btn btn-ghost btn-sm" data-addbelow="${idx}">+ bloco abaixo</button>
     <button class="btn btn-sm" style="background:#ff5c5c;color:#0a0a0a;" data-delblock="${idx}">excluir bloco</button>
   </div>`;
@@ -837,6 +842,9 @@ function wireBlockEvents(){
   cont.querySelectorAll('[data-addbelow]').forEach(btn=>{
     btn.addEventListener('click', ()=> abrirMenuTipos(Number(btn.dataset.addbelow) + 1));
   });
+  cont.querySelectorAll('[data-addtexto]').forEach(btn=>{
+    btn.addEventListener('click', ()=> adicionarCaixaTexto(Number(btn.dataset.addtexto) + 1));
+  });
 
   // drag and drop reorder
   cont.querySelectorAll('[data-drag]').forEach(handle=>{
@@ -905,6 +913,12 @@ function novoBlocoPadrao(tipo){
   return base;
 }
 
+function adicionarCaixaTexto(posicao){
+  state.blocos.splice(posicao, 0, novoBlocoPadrao('texto'));
+  salvarBlocos();
+  renderBlocos();
+}
+
 function abrirMenuTipos(posicao){
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
@@ -942,6 +956,7 @@ function ativarModoEdicao(){
     comprimirImagem(e.target.files[0], 400, dataUrl=> salvarLogo(dataUrl));
   });
   document.getElementById('add-block-top').querySelector('[data-add-topo]').addEventListener('click', ()=> abrirMenuTipos(0));
+  document.getElementById('add-texto-topo').addEventListener('click', ()=> adicionarCaixaTexto(0));
   renderBlocos();
 }
 
