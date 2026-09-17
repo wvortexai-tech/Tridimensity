@@ -252,6 +252,48 @@ function setPath(obj, path, value){
   cur[keys[keys.length-1]] = value;
 }
 
+// cache de imagens: chave "img:ID" -> dataURL
+state.imagens = {};
+
+function coletarReferenciasImagem(no, out){
+  if(typeof no === 'string'){
+    if(no.startsWith('img:')) out.add(no.slice(4));
+    return;
+  }
+  if(Array.isArray(no)){ no.forEach(v=> coletarReferenciasImagem(v, out)); return; }
+  if(no && typeof no === 'object'){ Object.values(no).forEach(v=> coletarReferenciasImagem(v, out)); }
+}
+
+async function carregarImagensReferenciadas(){
+  const ids = new Set();
+  coletarReferenciasImagem(state.blocos, ids);
+  if(ids.size === 0) return;
+  const {data, error} = await sb.from('portfolio_imagens').select('id, dataurl').in('id', Array.from(ids));
+  if(error){ console.error('Erro ao carregar imagens', error); return; }
+  data.forEach(row=>{ state.imagens['img:' + row.id] = row.dataurl; });
+}
+
+function resolverImagem(ref){
+  if(!ref) return null;
+  if(ref.startsWith('img:')) return state.imagens[ref] || null;
+  return ref; // já é um dataURL bruto (ex: logo antigo) ou outro formato
+}
+
+async function salvarNovaImagem(dataUrl){
+  const {data, error} = await sb.from('portfolio_imagens').insert({dataurl: dataUrl}).select().single();
+  if(error){ console.error('Erro ao salvar imagem', error); return null; }
+  const ref = 'img:' + data.id;
+  state.imagens[ref] = dataUrl;
+  return ref;
+}
+
+async function removerImagemAntiga(ref){
+  if(!ref || !ref.startsWith('img:')) return;
+  const id = Number(ref.slice(4));
+  await sb.from('portfolio_imagens').delete().eq('id', id);
+  delete state.imagens[ref];
+}
+
 async function carregarPagina(){
   try{
     const {data} = await sb.from('portfolio').select('*').in('chave', ['blocos','img_logo']);
@@ -263,7 +305,8 @@ async function carregarPagina(){
     console.error(e);
     state.blocos = JSON.parse(JSON.stringify(DEFAULT_BLOCKS));
   }
-  document.getElementById('logo-header').src = state.logo || LOGO_PADRAO;
+  await carregarImagensReferenciadas();
+  document.getElementById('logo-header').src = resolverImagem(state.logo) || LOGO_PADRAO;
 }
 
 async function salvarBlocos(){
@@ -320,13 +363,14 @@ async function carregarEstatisticas(){
 let ESTATS = {pedidos:'—', clientes:'—', meses:'—'};
 
 function imgSlotInner(src, ajuste){
-  if(!src) return '';
+  const url = resolverImagem(src);
+  if(!url) return '';
   const a = ajuste || {x:0, y:0, zoom:1};
-  return `<img src="${src}" draggable="false" style="width:100%;height:100%;object-fit:cover;transform:translate(${a.x}px,${a.y}px) scale(${a.zoom});transform-origin:center;pointer-events:none;">`;
+  return `<img src="${url}" draggable="false" style="width:100%;height:100%;object-fit:cover;transform:translate(${a.x}px,${a.y}px) scale(${a.zoom});transform-origin:center;pointer-events:none;">`;
 }
 
 function abrirAjusteFoto(imgPath, ajustePath){
-  const src = getPath(state.blocos, imgPath);
+  const src = resolverImagem(getPath(state.blocos, imgPath));
   const atual = getPath(state.blocos, ajustePath) || {x:0, y:0, zoom:1};
   let ajuste = {...atual};
   let arrastando = false;
@@ -423,7 +467,10 @@ function abrirAjusteFoto(imgPath, ajustePath){
 function bgStyle(bg){
   if(!bg || bg.tipo==='nenhum') return '';
   if(bg.tipo==='cor') return `background:${bg.cor};`;
-  if(bg.tipo==='imagem') return `background-image:url(${bg.imagem});background-size:cover;background-position:center;`;
+  if(bg.tipo==='imagem'){
+    const url = resolverImagem(bg.imagem);
+    return url ? `background-image:url(${url});background-size:cover;background-position:center;` : '';
+  }
   return '';
 }
 
@@ -443,7 +490,7 @@ function renderBlockContent(b, idx){
   const ed = state.editando ? 'true' : 'false';
   if(b.tipo === 'hero'){
     return `<div class="hero-wrap">
-      <img class="logo-img" src="${state.logo || LOGO_PADRAO}" alt="Tridimensity">
+      <img class="logo-img" src="${resolverImagem(state.logo) || LOGO_PADRAO}" alt="Tridimensity">
       <h1 class="hero-title" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h1>
       <div class="hero-sub" contenteditable="${ed}" data-path="${idx}.subtitulo">${b.subtitulo}</div>
     </div>`;
@@ -524,7 +571,7 @@ function renderBlockContent(b, idx){
     const fotos = (b.fotos||[]).map((foto, fi)=> `
       <div class="galeria-item">
         <button class="item-remove" style="display:${state.editando?'block':'none'};" data-removefoto="${idx}.${fi}">×</button>
-        <img src="${foto}">
+        <img src="${resolverImagem(foto)}">
       </div>
     `).join('');
     return `<div class="wrap">
@@ -564,7 +611,7 @@ function renderBlockContent(b, idx){
   }
   if(b.tipo === 'contato'){
     return `<div class="wrap contato-wrap">
-      <img class="logo-img" src="${state.logo || LOGO_PADRAO}" alt="Tridimensity">
+      <img class="logo-img" src="${resolverImagem(state.logo) || LOGO_PADRAO}" alt="Tridimensity">
       <h2 class="bloco-title" style="margin:0 auto 6px;" contenteditable="${ed}" data-path="${idx}.titulo">${b.titulo}</h2>
       <div class="linha" contenteditable="${ed}" data-path="${idx}.whats">${b.whats}</div>
       <div class="linha" contenteditable="${ed}" data-path="${idx}.insta">${b.insta}</div>
@@ -634,9 +681,13 @@ function wireBlockEvents(){
     slot.addEventListener('click', ()=> input.click());
     input.addEventListener('change', ()=>{
       if(!input.files[0]) return;
-      comprimirImagem(input.files[0], 900, dataUrl=>{
-        setPath(state.blocos, slot.dataset.imgblock, dataUrl);
-        salvarBlocos();
+      const antiga = getPath(state.blocos, slot.dataset.imgblock);
+      comprimirImagem(input.files[0], 900, async dataUrl=>{
+        const ref = await salvarNovaImagem(dataUrl);
+        if(!ref) return;
+        setPath(state.blocos, slot.dataset.imgblock, ref);
+        await salvarBlocos();
+        removerImagemAntiga(antiga);
         renderBlocos();
       });
     });
@@ -652,8 +703,9 @@ function wireBlockEvents(){
       let pendentes = files.length;
       if(!pendentes) return;
       files.forEach(file=>{
-        comprimirImagem(file, 900, dataUrl=>{
-          state.blocos[idx].fotos.push(dataUrl);
+        comprimirImagem(file, 900, async dataUrl=>{
+          const ref = await salvarNovaImagem(dataUrl);
+          if(ref) state.blocos[idx].fotos.push(ref);
           pendentes--;
           if(pendentes===0){ salvarBlocos(); renderBlocos(); }
         });
@@ -663,8 +715,10 @@ function wireBlockEvents(){
   cont.querySelectorAll('[data-removefoto]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const [idx, fi] = btn.dataset.removefoto.split('.');
+      const removida = state.blocos[idx].fotos[Number(fi)];
       state.blocos[idx].fotos.splice(Number(fi), 1);
       salvarBlocos(); renderBlocos();
+      removerImagemAntiga(removida);
     });
   });
 
@@ -752,9 +806,14 @@ function wireBlockEvents(){
     btn.addEventListener('click', ()=> input.click());
     input.addEventListener('change', ()=>{
       if(!input.files[0]) return;
-      comprimirImagem(input.files[0], 1400, dataUrl=>{
-        state.blocos[idx].bg = {tipo:'imagem', imagem: dataUrl};
-        salvarBlocos(); renderBlocos();
+      const antiga = state.blocos[idx].bg && state.blocos[idx].bg.imagem;
+      comprimirImagem(input.files[0], 1400, async dataUrl=>{
+        const ref = await salvarNovaImagem(dataUrl);
+        if(!ref) return;
+        state.blocos[idx].bg = {tipo:'imagem', imagem: ref};
+        await salvarBlocos();
+        removerImagemAntiga(antiga);
+        renderBlocos();
       });
     });
   });
