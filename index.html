@@ -1110,6 +1110,7 @@ function ativarModoEdicao(){
   document.getElementById('trocar-logo-btn').style.display = 'inline-block';
   document.getElementById('header-right').innerHTML = `
     <span style="font-size:0.75rem;color:var(--muted);">Modo edição ativo</span>
+    <a href="https://tridimensity.com.br/sistema" target="_blank" class="btn btn-primary">Ir para o Sistema</a>
     <button class="btn btn-ghost" id="sair-edicao">Sair da edição</button>
   `;
   document.getElementById('sair-edicao').addEventListener('click', async ()=>{ await sb.auth.signOut(); location.reload(); });
