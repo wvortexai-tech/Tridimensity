@@ -329,6 +329,8 @@ function comprimirImagem(file, maxW, callback){
     reader.readAsDataURL(file);
     return;
   }
+  // PNG/WebP: mantém como PNG pra preservar transparência (fundo transparente)
+  const preservarTransparencia = file.type === 'image/png' || file.type === 'image/webp';
   const reader = new FileReader();
   reader.onload = e => {
     const img = new Image();
@@ -338,7 +340,11 @@ function comprimirImagem(file, maxW, callback){
       canvas.width = img.width * scale;
       canvas.height = img.height * scale;
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      callback(canvas.toDataURL('image/jpeg', 0.82));
+      if(preservarTransparencia){
+        callback(canvas.toDataURL('image/png'));
+      } else {
+        callback(canvas.toDataURL('image/jpeg', 0.82));
+      }
     };
     img.src = e.target.result;
   };
